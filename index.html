@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Ecuaciones - Método Gauss-Jordan</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- MathJax -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+  <script>
+    MathJax.Hub.Config({
+      tex2jax: {
+        inlineMath: [['$', '$']],
+        displayMath: [['$$', '$$']]
+      }
+    });
+  </script>
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .card {
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .btn-primary {
+      background-color: #79aec8;
+      border-color: #79aec8;
+    }
+    .btn-primary:hover {
+      background-color: #5a9bc2;
+      border-color: #5a9bc2;
+    }
+  </style>
+</head>
+<body>
+  <div class="container mt-4">
+    <h1 class="text-center text-primary">Operaciones con las filas de un sistema lineal - Gauss-Jordan</h1>
+    <div class="row">
+      <!-- Sidebar -->
+      <div class="col-md-4">
+        <div class="card mb-3">
+          <div class="card-body">
+            <h4>Dimensiones del Sistema</h4>
+            <div class="row">
+              <div class="col-6">
+                <label for="rows" class="form-label">Número de Ecuaciones:</label>
+                <input type="number" id="rows" class="form-control" value="3" min="2" max="10">
+              </div>
+              <div class="col-6">
+                <label for="cols" class="form-label">Número de Variables:</label>
+                <input type="number" id="cols" class="form-control" value="3" min="2" max="10">
+              </div>
+            </div>
+            <button class="btn btn-primary w-100 mt-3" onclick="updateMatrix()">Actualizar Dimensiones</button>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-body">
+            <h4>Sistema de Ecuaciones</h4>
+            <div id="matrixInputs">
+              <!-- Inputs dinámicos aquí -->
+            </div>
+            <button class="btn btn-primary w-100 mt-3" onclick="generateMatrix()">Generar Matriz Ampliada</button>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-body">
+            <h4>Operaciones entre Filas</h4>
+            <select id="operationType" class="form-select mb-3">
+              <option value="multiply">Multiplicar fila por escalar</option>
+              <option value="add">Sumar múltiplo de una fila a otra</option>
+              <option value="swap">Intercambiar filas</option>
+            </select>
+            <div id="operationInputs">
+              <!-- Botones dinámicos aquí -->
+            </div>
+            <button class="btn btn-success w-100 mb-2" onclick="applyOperation()">Aplicar Operación</button>
+            <button class="btn btn-warning w-100" onclick="undoOperation()">Deshacer</button>
+          </div>
+        </div>
+      </div>
+      <!-- Main Panel -->
+      <div class="col-md-8">
+        <div class="card mb-3">
+          <div class="card-body">
+            <h4>Sistema de Ecuaciones</h4>
+            <div id="systemEquation">
+              $$\begin{cases} 2x_1 + 3x_2 + 4x_3 = 7 \\ 5x_1 + 2x_2 + 7x_3 = 9 \end{cases}$$
+            </div>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-body">
+            <h4>Matriz Ampliada</h4>
+            <div id="augmentedMatrix">
+              $$\begin{pmatrix} 2 & 3 & 4 &  & 7 \\ 5 & 2 & 7 &  & 9 \end{pmatrix}$$
+            </div>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-body">
+            <h4>Matriz Actual</h4>
+            <div id="currentMatrix">
+              $$\begin{pmatrix} 2 & 3 & 4 &  & 7 \\ 5 & 2 & 7 &  & 9 \end{pmatrix}$$
+            </div>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-body">
+            <h4>Historial de Operaciones</h4>
+            <pre id="operationHistory">No hay operaciones realizadas</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let rows = 3;
+    let cols = 3;
+    let matrix = [];
+    let history = [];
+    let steps = [];
+
+    // Función para calcular el máximo común divisor
+    function gcd(a, b) {
+      a = Math.abs(a);
+      b = Math.abs(b);
+      while (b > 0) {
+        const t = b;
+        b = a % b;
+        a = t;
+      }
+      return a;
+    }
+
+    // Función para crear una fracción
+    function Fraction(num = 0, den = 1) {
+      if (den === 0) return { num: 0, den: 1 };
+      const d = gcd(Math.abs(num), Math.abs(den));
+      if (den < 0) {
+        num = -num;
+        den = -den;
+      }
+      return { num: num / d, den: den / d };
+    }
+
+    // Función para sumar fracciones
+    function addFractions(f1, f2) {
+      const num = f1.num * f2.den + f2.num * f1.den;
+      const den = f1.den * f2.den;
+      return Fraction(num, den);
+    }
+
+    // Función para multiplicar fracciones
+    function multiplyFractions(f1, f2) {
+      const num = f1.num * f2.num;
+      const den = f1.den * f2.den;
+      return Fraction(num, den);
+    }
+
+    // Función para convertir un número decimal a fracción
+    function decimalToFraction(x, tolerance = 1e-10) {
+      if (isNaN(x) || !isFinite(x)) return Fraction(0, 1);
+      const sign = x < 0 ? -1 : 1;
+      x = Math.abs(x);
+      if (Math.abs(x - Math.round(x)) < tolerance) {
+        return Fraction(sign * Math.round(x), 1);
+      }
+      let bestError = x;
+      let bestFrac = [Math.round(x), 1];
+      for (let den = 1; den <= 1000; den++) {
+        const num = Math.round(x * den);
+        const error = Math.abs(num / den - x);
+        if (error < bestError) {
+          bestError = error;
+          bestFrac = [num, den];
+        }
+        if (error < tolerance) break;
+      }
+      return Fraction(sign * bestFrac[0], bestFrac[1]);
+    }
+
+    // Función para actualizar las dimensiones del sistema
+    function updateMatrix() {
+      rows = parseInt(document.getElementById("rows").value);
+      cols = parseInt(document.getElementById("cols").value);
+      renderMatrixInputs();
+      renderOperationButtons(); // Actualizar botones de operaciones
+    }
+
+    // Función para generar inputs dinámicos para la matriz
+    function renderMatrixInputs() {
+      const container = document.getElementById("matrixInputs");
+      container.innerHTML = ""; // Limpiar inputs anteriores
+
+      for (let i = 1; i <= rows; i++) {
+        const rowDiv = document.createElement("div");
+        rowDiv.classList.add("row", "mb-2");
+
+        for (let j = 1; j <= cols + 1; j++) {
+          const colDiv = document.createElement("div");
+          colDiv.classList.add("col");
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.classList.add("form-control");
+          input.id = `a${i}${j}`;
+          input.value = "0";
+
+          if (j <= cols) {
+            input.placeholder = `x${j}`;
+          } else {
+            input.placeholder = "=";
+          }
+
+          colDiv.appendChild(input);
+          rowDiv.appendChild(colDiv);
+        }
+
+        container.appendChild(rowDiv);
+      }
+    }
+
+    // Función para generar la matriz ampliada inicial
+    function generateMatrix() {
+      matrix = [];
+      steps = [];
+      history = [];
+
+      for (let i = 1; i <= rows; i++) {
+        const row = [];
+        for (let j = 1; j <= cols + 1; j++) {
+          const value = parseNumberToFraction(document.getElementById(`a${i}${j}`).value);
+          row.push(value);
+        }
+        matrix.push(row);
+      }
+
+      steps.push(JSON.parse(JSON.stringify(matrix))); // Guardar copia inicial
+      updateUI();
+    }
+
+    // Función para parsear un número a fracción
+    function parseNumberToFraction(str) {
+      if (!str) return Fraction(0, 1);
+      if (!isNaN(str)) {
+        if (str == Math.round(str)) return Fraction(str, 1);
+        return decimalToFraction(parseFloat(str));
+      }
+      if (str.includes("/")) {
+        const parts = str.split("/");
+        const num = parseFloat(parts[0]);
+        const den = parseFloat(parts[1]);
+        if (isNaN(num) || isNaN(den) || den === 0) return Fraction(0, 1);
+        return Fraction(num, den);
+      }
+      return decimalToFraction(parseFloat(str));
+    }
+
+    // Función para actualizar la interfaz de usuario
+    function updateUI() {
+      updateSystemEquation();
+      updateAugmentedMatrix();
+      updateCurrentMatrix();
+      updateOperationHistory();
+    }
+
+    // Función para actualizar el sistema de ecuaciones
+    function updateSystemEquation() {
+      const equations = [];
+      for (let i = 0; i < rows; i++) {
+        let equation = "";
+        for (let j = 0; j < cols; j++) {
+          const frac = matrix[i][j];
+          if (frac.num === 0) continue;
+          const coef = formatFraction(frac);
+          const term = `${coef}x_${j + 1}`;
+          equation += frac.num > 0 ? `+${term}` : term;
+        }
+        const constant = formatFraction(matrix[i][cols]);
+        equation = equation.replace(/^\+/, "") || "0";
+        equations.push(`${equation} = ${constant}`);
+      }
+      const latex = `$$\\begin{cases}${equations.join(" \\\\ ")}\\end{cases}$$`;
+      document.getElementById("systemEquation").innerHTML = latex;
+      MathJax.Hub.Queue(["Typeset", MathJax.Hub, "systemEquation"]);
+    }
+
+    // Función para actualizar la matriz ampliada
+    function updateAugmentedMatrix() {
+      const latex = formatMatrixLatex(steps[0]);
+      document.getElementById("augmentedMatrix").innerHTML = `$$${latex}$$`;
+      MathJax.Hub.Queue(["Typeset", MathJax.Hub, "augmentedMatrix"]);
+    }
+
+    // Función para actualizar la matriz actual
+    function updateCurrentMatrix() {
+      const latex = formatMatrixLatex(matrix);
+      document.getElementById("currentMatrix").innerHTML = `$$${latex}$$`;
+      MathJax.Hub.Queue(["Typeset", MathJax.Hub, "currentMatrix"]);
+    }
+
+    // Función para formatear una matriz en LaTeX
+    function formatMatrixLatex(mat) {
+      let latex = "\\begin{pmatrix}\n";
+      for (let i = 0; i < mat.length; i++) {
+        const row = mat[i];
+        const formattedRow = row.map((frac, idx) => {
+          if (idx === cols) latex += "  ";
+          return formatFraction(frac);
+        });
+        latex += formattedRow.join(" & ");
+        if (i < mat.length - 1) latex += " \\\\ ";
+        latex += "\n";
+      }
+      latex += "\\end{pmatrix}";
+      return latex;
+    }
+
+    // Función para formatear una fracción
+    function formatFraction(frac) {
+      if (frac.den === 1) return frac.num.toString();
+      return `${frac.num}/${frac.den}`;
+    }
+
+    // Función para actualizar el historial de operaciones
+    function updateOperationHistory() {
+      const operationHistoryDiv = document.getElementById("operationHistory");
+      operationHistoryDiv.textContent = history.length > 0 ? history.join("\n") : "No hay operaciones realizadas";
+    }
+
+    // Función para aplicar una operación
+    function applyOperation() {
+      const operationType = document.getElementById("operationType").value;
+
+      switch (operationType) {
+        case "multiply": {
+          const rowNum = parseInt(document.querySelector('input[name="rowNum"]').value) - 1;
+          const scalar = parseNumberToFraction(document.getElementById("scalar").value);
+          if (rowNum >= 0 && rowNum < rows) {
+            matrix[rowNum] = matrix[rowNum].map(frac => multiplyFractions(frac, scalar));
+            history.push(`F${rowNum + 1} = ${formatFraction(scalar)} × F${rowNum + 1}`);
+          }
+          break;
+        }
+        case "add": {
+          const sourceRow = parseInt(document.querySelector('input[name="sourceRow"]').value) - 1;
+          const targetRow = parseInt(document.querySelector('input[name="targetRow"]').value) - 1;
+          const multiplier = parseNumberToFraction(document.getElementById("multiplier").value);
+          if (sourceRow >= 0 && sourceRow < rows && targetRow >= 0 && targetRow < rows) {
+            matrix[targetRow] = matrix[targetRow].map((frac, idx) => {
+              const multTerm = multiplyFractions(matrix[sourceRow][idx], multiplier);
+              return addFractions(frac, multTerm);
+            });
+            history.push(`F${targetRow + 1} = F${targetRow + 1} + ${formatFraction(multiplier)} × F${sourceRow + 1}`);
+          }
+          break;
+        }
+        case "swap": {
+          const row1 = parseInt(document.querySelector('input[name="row1"]').value) - 1;
+          const row2 = parseInt(document.querySelector('input[name="row2"]').value) - 1;
+          if (row1 >= 0 && row1 < rows && row2 >= 0 && row2 < rows) {
+            [matrix[row1], matrix[row2]] = [matrix[row2], matrix[row1]];
+            history.push(`Intercambio F${row1 + 1} ↔ F${row2 + 1}`);
+          }
+          break;
+        }
+      }
+
+      steps.push(JSON.parse(JSON.stringify(matrix))); // Guardar copia actual
+      updateUI();
+    }
+
+    // Función para deshacer la última operación
+    function undoOperation() {
+      if (steps.length > 1) {
+        steps.pop(); // Eliminar el último paso
+        matrix = JSON.parse(JSON.stringify(steps[steps.length - 1])); // Restaurar estado anterior
+        history.pop(); // Eliminar la última operación del historial
+        updateUI();
+      }
+    }
+
+    // Función para generar botones dinámicos para las operaciones
+    function renderOperationButtons() {
+      const container = document.getElementById("operationInputs");
+      container.innerHTML = ""; // Limpiar botones anteriores
+
+      const operationType = document.getElementById("operationType").value;
+
+      if (operationType === "multiply") {
+        container.innerHTML = `
+          <label class="form-label">Selecciona la fila a multiplicar:</label>
+          <div id="rowButtons"></div>
+          <label class="form-label mt-2">Escalar:</label>
+          <input type="text" id="scalar" class="form-control" value="1">
+        `;
+        renderRowButtons("rowButtons", "rowNum");
+      } else if (operationType === "add") {
+        container.innerHTML = `
+          <label class="form-label">Selecciona la fila fuente:</label>
+          <div id="sourceRowButtons"></div>
+          <label class="form-label mt-2">Selecciona la fila destino:</label>
+          <div id="targetRowButtons"></div>
+          <label class="form-label mt-2">Multiplicador:</label>
+          <input type="text" id="multiplier" class="form-control" value="1">
+        `;
+        renderRowButtons("sourceRowButtons", "sourceRow");
+        renderRowButtons("targetRowButtons", "targetRow");
+      } else if (operationType === "swap") {
+        container.innerHTML = `
+          <label class="form-label">Selecciona la primera fila:</label>
+          <div id="row1Buttons"></div>
+          <label class="form-label mt-2">Selecciona la segunda fila:</label>
+          <div id="row2Buttons"></div>
+        `;
+        renderRowButtons("row1Buttons", "row1");
+        renderRowButtons("row2Buttons", "row2");
+      }
+    }
+
+    // Función para generar botones de fila
+    function renderRowButtons(containerId, buttonName) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = ""; // Limpiar botones anteriores
+
+      for (let i = 1; i <= rows; i++) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.classList.add("btn", "btn-secondary", "me-2", "mb-2");
+        button.textContent = `F${i}`;
+        button.onclick = () => {
+          document.querySelector(`input[name="${buttonName}"]`).value = i;
+        };
+
+        container.appendChild(button);
+      }
+
+      // Agregar un campo oculto para almacenar la selección
+      const hiddenInput = document.createElement("input");
+      hiddenInput.type = "hidden";
+      hiddenInput.name = buttonName;
+      container.appendChild(hiddenInput);
+    }
+
+    // Inicializar la interfaz
+    document.addEventListener("DOMContentLoaded", () => {
+      renderMatrixInputs();
+      renderOperationButtons();
+    });
+
+    // Actualizar botones de operaciones cuando cambia el tipo de operación
+    document.getElementById("operationType").addEventListener("change", renderOperationButtons);
+  </script>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
